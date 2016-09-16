@@ -4,19 +4,19 @@ import (
   "fmt"
   "os"
   "log"
+  "github.com/etrubenok/ExampleGolangREST/domain"
   "github.com/gin-gonic/gin"
   "github.com/jackc/pgx"
 )
 
-var pool *pgx.ConnPool
+var dbConnection domain.DbConnection
 
-func getUserHandler(c *gin.Context) {
+func GetUserHandler(c *gin.Context) {
   id := c.Params.ByName("id")
 
-  var name string
-  err := pool.QueryRow("select name from users where id=$1", id).Scan(&name)
-  if err != nil {
+  user, err := domain.GetUserById(dbConnection, id)
 
+  if err != nil {
     switch err {
     default:
       log.Panic(err)
@@ -28,10 +28,11 @@ func getUserHandler(c *gin.Context) {
     }
     return
   }
-  c.JSON(200, gin.H{"id": id, "name": name})
+
+  c.JSON(200, user)
 }
 
-func createUserHandler(c *gin.Context) {
+func CreateUserHandler(c *gin.Context) {
   var userJson struct {
     Name string `json:"name" binding:"required`
   }
@@ -40,19 +41,28 @@ func createUserHandler(c *gin.Context) {
   }
 }
 
+func SetupRouter() *gin.Engine {
+  r := gin.Default()
+  r.GET("/user/:id", GetUserHandler)
+  r.POST("/user", CreateUserHandler)
+
+  return r
+}
+
 func main() {
   var err error
+  var pool *pgx.ConnPool
   pool, err = pgx.NewConnPool(extractConfig())
+
   if err != nil {
     fmt.Fprintln(os.Stderr, "Unable to connect to database:", err)
     os.Exit(1)
   }
+  dbConnection = &domain.NewDbConnection{pool}
 
-  r := gin.Default()
 
-  r.GET("/user/:id", getUserHandler)
-  r.POST("/user", createUserHandler)
-  r.Run(":8080")
+  router := SetupRouter()
+  router.Run(":8080")
 }
 
 func extractConfig() pgx.ConnPoolConfig {
